@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - ..:/app
+    depends_on:
+      - db
+      - redis
+    env_file:
+      - ../.env
+    restart: unless-stopped
+    command: gunicorn --bind 0.0.0.0:5000 --workers 4 --threads 8 run:app
+
+  celery_worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ..:/app
+    depends_on:
+      - db
+      - redis
+    env_file:
+      - ../.env
+    restart: unless-stopped
+    command: celery -A app.tasks.celery_app worker --loglevel=info
+
+  celery_beat:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ..:/app
+    depends_on:
+      - db
+      - redis
+      - celery_worker
+    env_file:
+      - ../.env
+    restart: unless-stopped
+    command: celery -A app.tasks.celery_app beat --loglevel=info
+
+  db:
+    image: postgres:14
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
